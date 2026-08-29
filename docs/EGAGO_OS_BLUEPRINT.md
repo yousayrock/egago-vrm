@@ -4,175 +4,211 @@
 
 EGAGO OS is a lightweight, bootable Linux environment dedicated to running EGAGO as an appliance rather than as a general-purpose desktop PC.
 
-The target experience is:
+Target UX:
 
 ```text
-Power on PC
-  ↓
-Boot from EGAGO USB
-  ↓
-Minimal Linux starts
-  ↓
-Network / audio / touch / GPU ready
-  ↓
-EGAGO backend starts
-  ↓
-Chromium kiosk starts
-  ↓
-EGAGO opens full-screen
+Insert EGAGO USB
+→ Boot
+→ minimal Linux starts
+→ network / audio / touch / GPU become ready
+→ EGAGO backend starts
+→ kiosk browser starts
+→ EGAGO appears full-screen
 ```
 
-The internal Windows installation should remain untouched during the MVP phase. Removing the USB should return the machine to its original Windows environment.
+The internal Windows installation should remain untouched during the MVP phase. Removing the USB should return the machine to its original environment.
 
 ## 2. Reference Hardware
 
 Initial validation target:
 
-- Microsoft Surface generation using 3rd-gen Intel Core i5-class hardware
+- older Microsoft Surface / generic x86_64 touch PC
+- 3rd-generation Intel Core i5-class CPU
 - 4 GB RAM
 - Intel integrated graphics
-- Touch panel
+- touch panel
 - UEFI boot
 
-The project must not hard-code Surface-only behavior. The long-term target is generic x86_64 PCs, especially older touch-enabled laptops and tablets.
+Do not hard-code Surface-only behavior. The long-term target is older x86_64 touch laptops, tablets and PCs.
 
 ## 3. Product Principle
 
-Treat EGAGO like a game-console runtime.
+Treat EGAGO like a game-console runtime. Linux is implementation detail, not the product UI.
 
-The Linux desktop is implementation detail, not the product UI.
+Normal users should not see a desktop environment, terminal, package manager or Linux setup screens.
 
-Users should normally never see XFCE, a terminal, package managers, or desktop setup screens.
+> **A PC that becomes EGAGO when you boot it.**
 
-### Desired user experience
+## 4. Mandatory Pre-Implementation Linux Evaluation Gate
+
+**Do not begin implementation by assuming Debian, Mint, Alpine, NixOS or any other distribution is the final base.**
+
+Immediately before implementation starts, perform a fresh comparison/search of currently maintained Linux bases and kiosk-oriented projects. Record the decision and evidence in this repository.
+
+The evaluation must include at least:
+
+- Debian Minimal / Debian netinst
+- Alpine Linux
+- NixOS or a NixOS kiosk approach
+- Linux Mint Xfce as the known-working hardware validation environment
+- any actively maintained lightweight kiosk/embedded Linux project discovered during the fresh search
+
+Evaluate each candidate against EGAGO's actual requirements:
+
+1. idle RAM and background-service footprint;
+2. x86_64 / older Intel compatibility;
+3. Intel Mesa/WebGL acceleration for Three.js + VRM;
+4. touchscreen and libinput support;
+5. audio + microphone support;
+6. Wi-Fi / firmware availability;
+7. Chromium/Wayland support;
+8. Python/FastAPI compatibility;
+9. Node.js/build-tool compatibility;
+10. future local TTS compatibility;
+11. persistence on USB;
+12. reproducible ISO/image generation;
+13. boot time;
+14. maintenance/security updates;
+15. setup complexity and recovery/debuggability.
+
+### Current provisional favorite — not a locked decision
+
+As of the design phase, the leading architecture is:
 
 ```text
-Insert USB
-→ Boot USB
-→ EGAGO appears
-→ Touch and use
+Debian Minimal
+  ↓
+Mesa / libinput / audio / networking
+  ↓
+Wayland + Cage
+  ↓
+Chromium kiosk
+  ↓
+EGAGO
 ```
 
-## 4. MVP Strategy
+Cage is intentionally attractive because it is a single-application Wayland kiosk compositor rather than a full desktop environment.
 
-Do not build a custom Linux distribution from scratch first.
+However, **the implementation agent must re-run the Linux-base evaluation before writing the production bootstrap/image scripts.** If another maintained base demonstrably gives better compatibility, footprint or reproducibility, document the reason and change the base.
 
-Use Linux Mint Xfce as the bootstrap/reference environment because:
+## 5. Known Useful Reference Architectures
 
-- it already boots successfully on the reference Surface hardware;
-- it is relatively lightweight for 4 GB RAM systems;
-- it provides a straightforward Ubuntu-compatible package ecosystem;
-- it lets us validate EGAGO, touch, graphics, audio and networking before investing in ISO automation.
+During the design-phase search, useful patterns included:
 
-The first milestone is a persistent USB installation that behaves like EGAGO OS.
+- Debian-based Chromium kiosk systems;
+- Cage as a minimal single-application Wayland compositor;
+- NixOS + Cage + Chromium kiosk images with reproducible configuration;
+- Alpine-based Wayland/Chromium kiosk systems.
 
-## 5. Architecture
+These are architectural references, not dependencies. Do not blindly copy third-party kiosk scripts into EGAGO OS.
+
+## 6. Architecture
 
 ```text
-┌─────────────────────────────────────┐
-│              EGAGO OS               │
-│                                     │
-│  Minimal Linux / Mint Xfce base     │
-│          │                          │
-│          ├─ Wi-Fi / Network         │
-│          ├─ Touch input             │
-│          ├─ Audio                   │
-│          └─ Intel GPU / WebGL       │
-│                 │                   │
-│                 ▼                   │
-│          EGAGO Backend              │
-│             FastAPI                 │
-│                 │                   │
-│                 ▼                   │
-│          EGAGO Frontend             │
-│      React + Three.js / VRM         │
-│                 │                   │
-│                 ▼                   │
-│          Chromium Kiosk             │
-│                 │                   │
-│                 ▼                   │
-│              EGAGO UI               │
-└─────────────────────────────────────┘
+┌──────────────────────────────────────┐
+│               EGAGO OS               │
+│                                      │
+│  Selected minimal Linux base         │
+│       │                              │
+│       ├─ Intel GPU / Mesa            │
+│       ├─ Wi-Fi / networking          │
+│       ├─ touch / libinput            │
+│       └─ audio / microphone          │
+│                 │                    │
+│          Wayland + Cage              │
+│                 │                    │
+│          Chromium Kiosk              │
+│                 │                    │
+│          EGAGO Frontend              │
+│       React + Three.js / VRM         │
+│                 │                    │
+│          EGAGO Backend               │
+│             FastAPI                  │
+│                 │                    │
+│            TTS Gateway               │
+└──────────────────────────────────────┘
 ```
 
-## 6. Boot Modes
+A full desktop environment should not be installed in the production image unless hardware compatibility testing proves it necessary.
 
-### Phase A — Live validation
+## 7. Development / Validation Strategy
 
-Use the current Linux Mint Live USB only to verify:
+### Phase A — Hardware validation
+
+The existing Linux Mint Xfce Live USB is a known-working test environment. Use it to validate:
 
 - touchscreen
 - Wi-Fi
-- speakers / audio output
+- speakers
 - microphone
 - Intel GPU acceleration
 - WebGL
-- sleep / resume
 - display scaling
+- sleep/resume where relevant
 - EGAGO runtime
 
-No permanent disk changes are required.
+Mint is a validation tool, **not automatically the production EGAGO OS base**.
 
-### Phase B — Persistent EGAGO USB
+### Phase B — Minimal-base prototype
 
-Create a USB environment with writable persistence so that the following survive reboot:
+After the Linux Evaluation Gate selects a base:
+
+- install only required firmware/runtime packages;
+- launch EGAGO backend with systemd or the selected init system;
+- launch Cage/Wayland;
+- launch Chromium directly into EGAGO;
+- measure idle RAM and EGAGO runtime RAM;
+- compare WebGL/VRM performance with the Mint reference.
+
+### Phase C — Persistent USB
+
+Persist:
 
 - Wi-Fi configuration
-- EGAGO repository / build artifacts
-- user settings
+- EGAGO settings
 - VRM assets
 - logs
-- voice configuration
+- voice/TTS configuration
 - application updates
 
-### Phase C — EGAGO OS image
-
-Package the working environment as a reproducible x86_64 image/ISO.
+### Phase D — Reproducible EGAGO OS image
 
 Target UX:
 
 ```text
-Download egago-os-x86_64.iso
+Download egago-os-x86_64.iso/image
 → write with Rufus / Etcher
-→ boot on target PC
+→ boot target PC
 → EGAGO starts automatically
 ```
 
-## 7. Runtime Services
+## 8. Runtime Services
 
-EGAGO OS should eventually run the following services automatically.
+### egago-backend
 
-### egago-backend.service
-
-Responsibilities:
-
-- launch FastAPI backend;
+- launch FastAPI;
 - restart on failure;
-- wait for required local services;
+- expose readiness status;
 - log startup/runtime failures.
 
-### egago-ui.service
+### egago-ui
 
-Responsibilities:
+- start the kiosk compositor;
+- launch Chromium full-screen against local EGAGO;
+- relaunch on unexpected exit.
 
-- launch Chromium in kiosk/fullscreen mode;
-- open the local EGAGO frontend;
-- relaunch Chromium if it exits unexpectedly.
+### egago-health
 
-### egago-health.service
+Later:
 
-Future responsibility:
+- backend readiness;
+- frontend readiness;
+- TTS readiness;
+- recovery screen / admin mode.
 
-- verify backend readiness;
-- verify frontend readiness;
-- verify TTS service;
-- expose a simple recovery screen when startup fails.
-
-## 8. Voice Architecture
+## 9. Voice Architecture
 
 Do not couple EGAGO directly to one TTS engine.
-
-Use a replaceable TTS gateway:
 
 ```text
 EGAGO
@@ -185,51 +221,49 @@ TTS Gateway
 Audio output
 ```
 
-Initial implementation may use VOICEVOX or another available engine. The API boundary must allow a future custom voice model without rewriting the EGAGO UI.
+The 4 GB reference device is not expected to train a custom voice model. Training should happen on stronger hardware. The appliance can perform inference locally when practical or call a trusted LAN service.
 
-Training a custom voice model is not expected to run on the 4 GB reference Surface. Training should happen on a more powerful machine, while the EGAGO device performs inference locally when practical or calls a trusted LAN-hosted voice service.
+## 10. Touch-first Requirements
 
-## 9. Touch-first Requirements
-
-EGAGO OS must be usable without mouse or keyboard during normal operation.
-
-EGAGO UI should therefore avoid desktop-only interactions.
-
-Requirements:
+Normal operation must work without mouse or keyboard.
 
 - large touch targets;
 - no hover-only controls;
 - no right-click dependency;
-- large readable text;
+- readable text;
 - touch-friendly scrolling;
-- on-screen keyboard support where text input is needed;
-- fullscreen/kiosk operation;
-- a hidden/admin escape path for maintenance.
+- on-screen keyboard where required;
+- kiosk/full-screen operation;
+- hidden/admin maintenance escape path.
 
-## 10. Performance Budget
+## 11. Performance Budget
 
-The reference machine has only 4 GB RAM, so the OS must leave as much memory as possible for EGAGO.
+The reference machine has only 4 GB RAM. Prioritize resources in this order:
 
-Priorities:
+1. Three.js / VRM frontend;
+2. Chromium GPU acceleration;
+3. FastAPI backend;
+4. audio / TTS;
+5. networking;
+6. OS/UI infrastructure.
 
-1. EGAGO frontend / Three.js / VRM
-2. EGAGO backend
-3. browser GPU acceleration
-4. audio / TTS
-5. networking
-6. desktop environment only as a fallback/admin shell
+Avoid a resident desktop environment, unnecessary daemons, indexing services and startup applications.
 
-Avoid unnecessary resident services and startup applications.
+Every production-base experiment should record at minimum:
 
-## 11. Repository Layout Proposal
+- idle RAM after boot;
+- RAM with EGAGO idle;
+- RAM while VRM is active;
+- boot-to-EGAGO time;
+- WebGL renderer;
+- touch/audio/Wi-Fi status.
 
-Keep EGAGO application code and OS integration clearly separated.
-
-Suggested layout in this repository for the MVP:
+## 12. Repository Layout Proposal
 
 ```text
 docs/
   EGAGO_OS_BLUEPRINT.md
+  EGAGO_OS_BASE_EVALUATION.md
 
 egago-os/
   scripts/
@@ -247,74 +281,64 @@ egago-os/
 
 If the OS layer grows substantially, extract `egago-os/` into its own repository later.
 
-## 12. Implementation Milestones
+## 13. Implementation Milestones
 
-### V0.1 — Prove EGAGO on Live Mint
+### V0.0 — Linux Base Evaluation
 
-- boot Linux Mint Xfce on reference Surface;
-- verify touch, Wi-Fi, audio and WebGL;
-- clone EGAGO;
-- install runtime dependencies;
+- perform a fresh search immediately before implementation;
+- compare current lightweight/kiosk Linux options;
+- benchmark/estimate the finalists against EGAGO requirements;
+- write `docs/EGAGO_OS_BASE_EVALUATION.md`;
+- select the production base explicitly.
+
+**Implementation of the production image must not proceed until V0.0 is complete.**
+
+### V0.1 — Prove EGAGO on Linux hardware
+
+- verify touch, Wi-Fi, audio and WebGL on the reference Surface;
 - start FastAPI + frontend;
 - verify VRM rendering and interaction.
 
-### V0.2 — Persistent USB
+### V0.2 — Minimal appliance prototype
 
-- create persistent USB environment;
+- install the selected minimal Linux base;
+- configure Wayland/Cage or the selected equivalent;
+- automatically start EGAGO;
+- measure footprint and performance.
+
+### V0.3 — Persistent USB
+
 - preserve EGAGO and settings across reboot;
 - configure automatic startup;
-- configure Chromium kiosk mode;
-- hide the normal desktop during regular use.
-
-### V0.3 — Appliance Mode
-
-- automatic login;
-- backend service startup;
-- kiosk UI startup;
-- touch-friendly UI defaults;
-- recovery/admin mode;
-- basic health checks.
+- provide recovery/admin access.
 
 ### V1.0 — Reproducible EGAGO OS
 
 - scripted image build;
 - bootable x86_64 ISO/image;
 - one-step USB writing workflow;
-- hardware compatibility checklist;
-- update strategy;
-- rollback/recovery strategy.
+- compatibility checklist;
+- update and rollback strategy.
 
-## 13. Immediate Next Step
-
-Before implementing custom ISO generation, validate the current EGAGO repository on the already-booting Linux Mint Live environment.
-
-Definition of done for the next session:
+## 14. Definition of Done for V1
 
 ```text
-Mint Live boots
+Write EGAGO OS image to USB
++ boot old x86_64 PC
 + touchscreen works
 + Wi-Fi works
-+ audio works
-+ WebGL works
-+ EGAGO backend starts
-+ EGAGO frontend starts
-+ VRM renders
++ audio/microphone work
++ GPU/WebGL acceleration works
++ EGAGO backend starts automatically
++ EGAGO frontend starts automatically
++ VRM renders smoothly enough for target hardware
++ normal user never needs the Linux desktop
 ```
 
-Once that passes, automate the same setup in `egago-os/scripts/bootstrap.sh`.
+## 15. Non-goals for MVP
 
-## 14. Non-goals for MVP
-
-- replacing Linux kernel components unnecessarily;
-- building a distribution completely from scratch;
-- installing over or modifying the user's Windows disk;
-- training custom voice models on the reference 4 GB device;
-- supporting every x86 device before the reference Surface works reliably.
-
-## 15. Long-term Vision
-
-EGAGO OS should make old PCs useful as dedicated interactive character terminals.
-
-The product identity is not “Linux running EGAGO”. It is:
-
-> **A PC that becomes EGAGO when you boot it.**
+- rewriting the Linux kernel;
+- modifying the internal Windows disk;
+- training custom voice models on the 4 GB reference device;
+- supporting every x86 machine before the reference hardware works;
+- choosing an OS solely because it has the smallest ISO size while sacrificing GPU/audio/touch/TTS compatibility.
