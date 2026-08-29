@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { VRM } from '@pixiv/three-vrm';
 import { applyRestPose, disposeVRM, loadVRMFromUrl } from '../vrm/VRMAdapter';
+import { buildEmotionCues, type EmotionCue } from './autoEmotion';
 import { buildGestureCues, type GestureCue } from './autoGesture';
 import { EmotionEngine } from './EmotionEngine';
 import { ExpressionMixer } from './ExpressionMixer';
@@ -29,6 +30,8 @@ export class CharacterEngine {
   autoNod = true;
   /** 文末や句切れに合わせて仕草を自動で出す。 */
   autoGesture = true;
+  /** セリフの内容に合わせて表情を自動で変える。 */
+  autoEmotion = true;
 
   onModelChanged: ((vrm: VRM) => void) | null = null;
 
@@ -41,6 +44,17 @@ export class CharacterEngine {
   /** 自動ジェスチャーの予定表と、次に発火させる位置。 */
   private cues: GestureCue[] = [];
   private cueIndex = 0;
+
+  /** 自動表情の予定表と、次に発火させる位置。 */
+  private emotionCues: EmotionCue[] = [];
+  private emotionCueIndex = 0;
+
+  /**
+   * パネルで選ばれている感情。自動表情はここを一時的に上書きし、
+   * 感情語の無い文と発話の終わりでここへ戻る。
+   */
+  private baseEmotion: EmotionName = 'neutral';
+  private baseIntensity = 1;
   /** speech.play より先に渡しておく発話テキスト。onStart で仕草の組み立てに使う。 */
   private pendingText = '';
 
@@ -63,6 +77,16 @@ export class CharacterEngine {
         : [];
       this.cueIndex = 0;
 
+      this.emotionCues = this.autoEmotion
+        ? buildEmotionCues(
+            this.pendingText,
+            timeline.phrases,
+            timeline.reading,
+            timeline.readingTime,
+          )
+        : [];
+      this.emotionCueIndex = 0;
+
       if (this.autoNod) this.motion.trigger('nod', 0.7);
     };
 
@@ -71,6 +95,10 @@ export class CharacterEngine {
       this.motion.stopProsody();
       this.cues = [];
       this.cueIndex = 0;
+      // 自動で変えた表情はパネルで選ばれているものへ戻す
+      this.emotionCues = [];
+      this.emotionCueIndex = 0;
+      this.applyEmotion(this.baseEmotion, this.baseIntensity);
     };
   }
 
@@ -111,6 +139,13 @@ export class CharacterEngine {
   }
 
   setEmotion(name: EmotionName, intensity = 1): void {
+    this.baseEmotion = name;
+    this.baseIntensity = intensity;
+    this.applyEmotion(name, intensity);
+  }
+
+  /** 実際に表情と立ち姿へ流す。基準の更新は伴わない (自動表情はこちらだけを使う)。 */
+  private applyEmotion(name: EmotionName, intensity: number): void {
     this.emotion.set(name, intensity);
     // 表情だけでなく立ち姿も変える
     this.motion.setPosture(name);
@@ -126,11 +161,21 @@ export class CharacterEngine {
 
     const speechTime = this.speech.playing ? this.speech.time : null;
 
-    // 1. 予定表に沿って仕草を発火させる
+    // 1. 予定表に沿って仕草と表情を発火させる
     if (speechTime !== null) {
       while (this.cueIndex < this.cues.length && speechTime >= this.cues[this.cueIndex].time) {
         const cue = this.cues[this.cueIndex++];
         this.motion.trigger(cue.gesture, cue.strength);
+      }
+
+      while (
+        this.emotionCueIndex < this.emotionCues.length &&
+        speechTime >= this.emotionCues[this.emotionCueIndex].time
+      ) {
+        const cue = this.emotionCues[this.emotionCueIndex++];
+        // emotion が null の文は感情語を含まないので、基準の感情へ戻す
+        if (cue.emotion) this.applyEmotion(cue.emotion, cue.intensity);
+        else this.applyEmotion(this.baseEmotion, this.baseIntensity);
       }
     }
 

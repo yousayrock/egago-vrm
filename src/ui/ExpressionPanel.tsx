@@ -21,6 +21,7 @@ export function ExpressionPanel({ onGesture }: { onGesture: (g: GestureName) => 
   const behavior = useStore((s) => s.behavior);
   const autoNod = useStore((s) => s.autoNod);
   const autoGesture = useStore((s) => s.autoGesture);
+  const autoEmotion = useStore((s) => s.autoEmotion);
 
   return (
     <>
@@ -36,6 +37,11 @@ export function ExpressionPanel({ onGesture }: { onGesture: (g: GestureName) => 
             </button>
           ))}
         </div>
+        {autoEmotion && (
+          <p className="hint" style={{ marginTop: 8, marginBottom: 0 }}>
+            セリフに感情語があるあいだは自動で表情が変わり、言い終わるとここで選んだ表情に戻ります。
+          </p>
+        )}
       </Panel>
 
       <Panel title="Gesture">
@@ -55,6 +61,11 @@ export function ExpressionPanel({ onGesture }: { onGesture: (g: GestureName) => 
       </Panel>
 
       <Panel title="Auto Motion">
+        <Toggle
+          label="セリフに合わせて表情が変わる"
+          checked={autoEmotion}
+          onChange={(v) => set('autoEmotion', v)}
+        />
         <Toggle
           label="文末に合わせて仕草を出す"
           checked={autoGesture}

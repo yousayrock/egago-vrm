@@ -14,6 +14,13 @@ export interface StageState {
   backgroundColor: string;
   cameraDistance: number;
   cameraHeight: number;
+  /**
+   * 自動化のオン/オフ。
+   * Stage は受け取った text から仕草と表情を自分で組み立てるので、
+   * これを送らないと Editor で切ったのに Stage だけ動き続けることになる。
+   */
+  autoGesture: boolean;
+  autoEmotion: boolean;
 }
 
 export type BusMessage =

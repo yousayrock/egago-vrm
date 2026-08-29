@@ -53,6 +53,8 @@ interface State {
   autoNod: boolean;
   /** 文末や句切れに合わせて仕草を自動で出す */
   autoGesture: boolean;
+  /** セリフの内容に合わせて表情を自動で変える */
+  autoEmotion: boolean;
   /** 声の高さに合わせて頭と体を動かす */
   prosody: boolean;
   /** 沈黙中のさりげない仕草 */
@@ -116,6 +118,7 @@ export const useStore = create<State>()(
       idle: true,
       autoNod: true,
       autoGesture: true,
+      autoEmotion: true,
       prosody: true,
       behavior: true,
       emotion: 'neutral',
@@ -168,6 +171,7 @@ export const useStore = create<State>()(
         idle: s.idle,
         autoNod: s.autoNod,
         autoGesture: s.autoGesture,
+        autoEmotion: s.autoEmotion,
         prosody: s.prosody,
         behavior: s.behavior,
         emotion: s.emotion,

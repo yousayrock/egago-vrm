@@ -1,3 +1,4 @@
+import { sentenceRanges } from './sentenceTiming';
 import type { PhraseTiming } from './speechTimeline';
 import type { GestureName } from './types';
 
@@ -98,14 +99,6 @@ function endingOf(sentence: string): Ending {
   return 'none';
 }
 
-/** 文末の記号を残したまま文に分割する。 */
-function splitSentences(text: string): string[] {
-  return text
-    .split(/(?<=[。．.!?！？…])/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
 /** ±ratio の範囲でゆらぎを与える。機械的な等間隔を避けるため。 */
 function jitter(v: number, ratio: number): number {
   return v * (1 + (Math.random() * 2 - 1) * ratio);
@@ -179,34 +172,26 @@ export function buildGestureCues(
   const cues: GestureCue[] = [];
 
   // --- 2. 文の形による仕草 ---
-  // 息継ぎのある句 + 最後の句が「文の切れ目」の候補になる。
-  // VOICEVOX は句読点の位置に pause_mora を入れるので、これが文の区切りとほぼ一致する。
-  const boundaries: number[] = [];
-  phrases.forEach((p, i) => {
-    if (p.hasPause || i === phrases.length - 1) boundaries.push(i);
-  });
-
-  const sentences = splitSentences(text);
-  const pairCount = Math.min(sentences.length, boundaries.length);
+  // 文と発話時刻の対応づけは自動表情と共通 (sentenceTiming)。
+  // 別々に区切ると仕草と表情が違う文を見てしまう。
   const usedBoundaries = new Set<number>();
 
-  for (let i = 0; i < pairCount; i++) {
-    const phrase = phrases[boundaries[i]];
-    usedBoundaries.add(boundaries[i]);
+  for (const range of sentenceRanges(text, phrases)) {
+    usedBoundaries.add(range.endPhrase);
 
     let cue: GestureCue | null = null;
-    switch (endingOf(sentences[i])) {
+    switch (endingOf(range.text)) {
       case 'question':
         // 語尾が上がりきる少し前に首をかしげ始めると「問いかけ」に見える
         cue = {
-          time: Math.max(0, phrase.end - 0.55),
+          time: Math.max(0, range.end - 0.55),
           gesture: 'tilt',
           strength: jitter(0.9, 0.15),
         };
         break;
       case 'exclaim':
         cue = {
-          time: Math.max(0, phrase.end - 0.35),
+          time: Math.max(0, range.end - 0.35),
           gesture: 'nod',
           strength: jitter(1.25, 0.12),
         };
@@ -214,7 +199,7 @@ export function buildGestureCues(
       case 'period':
         // 言い切りに軽くうなずきを添える
         cue = {
-          time: Math.max(0, phrase.end - 0.25),
+          time: Math.max(0, range.end - 0.25),
           gesture: 'nod',
           strength: jitter(0.6, 0.2),
         };

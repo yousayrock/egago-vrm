@@ -92,7 +92,15 @@ export function EditorPage() {
   // --- Stage へ設定を配信 ---
   useEffect(() => {
     bus.send({ type: 'state', state: currentStageState() });
-  }, [s.modelUrl, s.background, s.backgroundColor, s.cameraDistance, s.cameraHeight]);
+  }, [
+    s.modelUrl,
+    s.background,
+    s.backgroundColor,
+    s.cameraDistance,
+    s.cameraHeight,
+    s.autoGesture,
+    s.autoEmotion,
+  ]);
 
   // Stage が鳴らしているあいだは Editor を黙らせる(口パクの時計は動かしたまま)
   useEffect(() => {
@@ -270,5 +278,7 @@ function currentStageState(): StageState {
     backgroundColor: s.backgroundColor,
     cameraDistance: s.cameraDistance,
     cameraHeight: s.cameraHeight,
+    autoGesture: s.autoGesture,
+    autoEmotion: s.autoEmotion,
   };
 }

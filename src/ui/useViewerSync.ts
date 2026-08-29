@@ -19,6 +19,7 @@ export function useViewerSync(viewer: Viewer | null) {
   const behavior = useStore((s) => s.behavior);
   const autoNod = useStore((s) => s.autoNod);
   const autoGesture = useStore((s) => s.autoGesture);
+  const autoEmotion = useStore((s) => s.autoEmotion);
   const emotion = useStore((s) => s.emotion);
 
   const [loading, setLoading] = useState(false);
@@ -61,7 +62,8 @@ export function useViewerSync(viewer: Viewer | null) {
     if (!viewer) return;
     viewer.character.autoNod = autoNod;
     viewer.character.autoGesture = autoGesture;
-  }, [viewer, autoNod, autoGesture]);
+    viewer.character.autoEmotion = autoEmotion;
+  }, [viewer, autoNod, autoGesture, autoEmotion]);
 
   useEffect(() => {
     viewer?.character.setEmotion(emotion);
