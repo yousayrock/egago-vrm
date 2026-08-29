@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { Health } from './api';
-import type { BackgroundMode, EmotionName, Speaker, VrmModel } from './types';
+import type { BackgroundMode, CharacterMode, EmotionName, ScriptLine, Speaker, StageCharacter, VrmModel } from './types';
 
 /**
  * 設定は localStorage に保存し、次回起動時に復元する (docs T017 の軽量版)。
@@ -36,14 +36,20 @@ interface State {
   // --- 保存する設定 ---
   speakerId: number;
   text: string;
+  scriptLines: ScriptLine[];
   speedScale: number;
   pitchScale: number;
   intonationScale: number;
   volumeScale: number;
 
   modelUrl: string;
+  characterMode: CharacterMode;
+  characterImage: string;
+  characters: StageCharacter[];
+  selectedCharacterId: string;
   background: BackgroundMode;
   backgroundColor: string;
+  backgroundImage: string;
   cameraDistance: number;
   cameraHeight: number;
 
@@ -81,6 +87,9 @@ interface State {
 }
 
 export const DEFAULT_MODEL_URL = '/models/default.vrm';
+const DEFAULT_STAGE_CHARACTERS: StageCharacter[] = [
+  { id: 'eriru-1', name: 'エリルたそ 1', x: 0, height: 0, depth: 0, scale: 1, rotation: 0, facing: 1 },
+];
 
 /**
  * Stage は設定を保存しない。
@@ -102,14 +111,20 @@ export const useStore = create<State>()(
     (set) => ({
       speakerId: 3, // ずんだもん(ノーマル)。存在しなければ話者取得後に先頭へ寄せる。
       text: 'こんにちは。EGAGO VRM です。すべての絵には、愛があります。',
+      scriptLines: [{ id: 'line-1', characterId: 'eriru-1', text: 'こんにちは。EGAGO VRM です。すべての絵には、愛があります。' }],
       speedScale: 1.0,
       pitchScale: 0.0,
       intonationScale: 1.0,
       volumeScale: 1.0,
 
       modelUrl: DEFAULT_MODEL_URL,
-      background: 'color',
+      characterMode: 'image',
+      characterImage: '/characters/eriru-default-transparent.png',
+      characters: DEFAULT_STAGE_CHARACTERS,
+      selectedCharacterId: 'eriru-1',
+      background: 'alpha',
       backgroundColor: '#1b1d24',
+      backgroundImage: '',
       cameraDistance: 1.6,
       cameraHeight: 0,
 
@@ -153,16 +168,45 @@ export const useStore = create<State>()(
     }),
     {
       name: 'egago-vrm',
+      version: 5,
       storage: createJSONStorage(() => (isStage ? noopStorage : localStorage)),
+      migrate: (persisted) => {
+        const state = persisted as Partial<State>;
+        return {
+          ...state,
+          ...(state.background === 'color' && state.backgroundColor === '#1b1d24'
+            ? { background: 'alpha' as BackgroundMode }
+            : {}),
+          ...(state.characterImage === '/characters/eriru-default.png'
+            ? { characterImage: '/characters/eriru-default-transparent.png' }
+            : {}),
+          ...(state.background === 'image' && !state.backgroundImage
+            ? { background: 'alpha' as BackgroundMode }
+            : {}),
+          characters: Array.isArray(state.characters) && state.characters.length
+            ? state.characters.map((character) => ({ ...character, depth: character.depth ?? 0, rotation: character.rotation ?? 0, facing: character.facing ?? 1 }))
+            : DEFAULT_STAGE_CHARACTERS,
+          selectedCharacterId: state.selectedCharacterId ?? DEFAULT_STAGE_CHARACTERS[0].id,
+          scriptLines: Array.isArray(state.scriptLines) && state.scriptLines.length
+            ? state.scriptLines
+            : [{ id: 'line-1', characterId: state.selectedCharacterId ?? 'eriru-1', text: state.text ?? '' }],
+        };
+      },
       partialize: (s) => ({
         speakerId: s.speakerId,
         text: s.text,
+        scriptLines: s.scriptLines,
         speedScale: s.speedScale,
         pitchScale: s.pitchScale,
         intonationScale: s.intonationScale,
         volumeScale: s.volumeScale,
         modelUrl: s.modelUrl,
-        background: s.background,
+        characterMode: s.characterMode,
+        characterImage: s.characterImage,
+        characters: s.characters,
+        selectedCharacterId: s.selectedCharacterId,
+        // ローカル画像は blob URL であり、再読み込み後は使えないため背景モードだけを透明へ戻す。
+        background: s.background === 'image' ? 'alpha' : s.background,
         backgroundColor: s.backgroundColor,
         cameraDistance: s.cameraDistance,
         cameraHeight: s.cameraHeight,

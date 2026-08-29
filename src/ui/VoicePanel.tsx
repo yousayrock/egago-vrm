@@ -20,7 +20,7 @@ export function VoicePanel() {
   );
 
   return (
-    <Panel title="Voice">
+    <Panel title="声（こえ）">
       <Field label="話者">
         <select
           value={currentSpeaker?.uuid ?? ''}

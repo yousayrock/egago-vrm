@@ -10,6 +10,7 @@ import type { AudioQuery } from './types';
 export class SpeechEngine {
   private ctx: AudioContext | null = null;
   private gain: GainNode | null = null;
+  private captureDestination: MediaStreamAudioDestinationNode | null = null;
   private source: AudioBufferSourceNode | null = null;
   private startedAt = 0;
 
@@ -26,6 +27,8 @@ export class SpeechEngine {
       this.ctx = new AudioContext();
       this.gain = this.ctx.createGain();
       this.gain.connect(this.ctx.destination);
+      this.captureDestination = this.ctx.createMediaStreamDestination();
+      this.gain.connect(this.captureDestination);
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
     return this.ctx;
@@ -77,6 +80,11 @@ export class SpeechEngine {
   setMuted(muted: boolean): void {
     this.muted = muted;
     if (this.gain) this.gain.gain.value = muted ? 0 : 1;
+  }
+
+  getRecordingStream(): MediaStream {
+    this.ensureContext();
+    return this.captureDestination!.stream;
   }
 
   /** 再生開始からの経過秒。停止中は 0。 */

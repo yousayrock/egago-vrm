@@ -25,7 +25,7 @@ export function ExpressionPanel({ onGesture }: { onGesture: (g: GestureName) => 
 
   return (
     <>
-      <Panel title="Emotion">
+      <Panel title="気分">
         <div className="grid c3">
           {EMOTIONS.map((e: EmotionName) => (
             <button
@@ -44,7 +44,7 @@ export function ExpressionPanel({ onGesture }: { onGesture: (g: GestureName) => 
         )}
       </Panel>
 
-      <Panel title="Gesture">
+      <Panel title="動き">
         <div className="grid c3">
           {GESTURES.map((g) => (
             <button key={g} onClick={() => onGesture(g)}>
@@ -54,13 +54,13 @@ export function ExpressionPanel({ onGesture }: { onGesture: (g: GestureName) => 
         </div>
       </Panel>
 
-      <Panel title="Motion">
+      <Panel title="体の動き">
         <Toggle label="呼吸" checked={breath} onChange={(v) => set('breath', v)} />
         <Toggle label="瞬き" checked={blink} onChange={(v) => set('blink', v)} />
         <Toggle label="Idle" checked={idle} onChange={(v) => set('idle', v)} />
       </Panel>
 
-      <Panel title="Auto Motion">
+      <Panel title="おまかせ">
         <Toggle
           label="セリフに合わせて表情が変わる"
           checked={autoEmotion}

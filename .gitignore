@@ -6,6 +6,7 @@ __pycache__/
 .venv/
 .DS_Store
 *.local
+tmp/
 
 # VRM モデルは配布対象に含めない (ライセンスは各モデルに従う)
 public/models/*.vrm

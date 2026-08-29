@@ -5,14 +5,16 @@ import { useStore } from '../core/store';
 import type { GestureName } from '../core/types';
 import type { Viewer } from '../three/Viewer';
 import { ExpressionPanel } from '../ui/ExpressionPanel';
-import { Panel, Toggle } from '../ui/parts';
+import { CharacterScriptPanel } from '../ui/CharacterScriptPanel';
 import { ScenePanel } from '../ui/ScenePanel';
 import { useViewerSync } from '../ui/useViewerSync';
 import { VoicePanel } from '../ui/VoicePanel';
 import { VrmCanvas } from '../ui/VrmCanvas';
+import { TwoDCharacter } from '../ui/TwoDCharacter';
 
 /** Stage 側が生きているとみなす猶予。heartbeat 2 回分ぶんの余裕を見る。 */
 const STAGE_TIMEOUT = 12_000;
+const CONTROLLERS = ['おしゃべり', '声（こえ）', '気分', '動き', '体の動き', 'おまかせ', 'キャラクター', '背景', 'カメラ'];
 
 export function EditorPage() {
   const [viewer, setViewer] = useState<Viewer | null>(null);
@@ -21,8 +23,52 @@ export function EditorPage() {
 
   const s = useStore();
   const { patch, set } = s;
+  const stageCharacters = Array.isArray(s.characters) && s.characters.length
+    ? s.characters
+    : [{ id: 'eriru-1', name: 'エリルたそ 1', x: 0, height: 0, depth: 0, scale: 1, rotation: 0, facing: 1 as const }];
 
   const stageTimer = useRef<number | undefined>(undefined);
+  const controlPagesRef = useRef<HTMLDivElement>(null);
+  const [activeControl, setActiveControl] = useState(0);
+  const [twoDGesture, setTwoDGesture] = useState<GestureName | null>(null);
+  const [speakingLine, setSpeakingLine] = useState<number | null>(null);
+  const stopScriptRef = useRef(false);
+  const [recording, setRecording] = useState(false);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const draggedCharacterRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      const id = draggedCharacterRef.current;
+      const bounds = previewRef.current?.getBoundingClientRect();
+      if (!id || !bounds) return;
+      const x = Math.max(-1, Math.min(1, ((event.clientX - bounds.left) / bounds.width - 0.5) / 0.24));
+      const height = Math.max(0, Math.min(1, (bounds.bottom - event.clientY) / bounds.height / 0.24));
+      const state = useStore.getState();
+      state.patch({ characters: state.characters.map((character) => character.id === id ? { ...character, x, height } : character) });
+    };
+    const end = () => { draggedCharacterRef.current = null; };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+    };
+  }, []);
+
+  const startCharacterDrag = useCallback((event: React.PointerEvent<HTMLDivElement>, id: string) => {
+    event.preventDefault();
+    draggedCharacterRef.current = id;
+    set('selectedCharacterId', id);
+  }, [set]);
+
+  const goToControl = useCallback((index: number) => {
+    const pages = controlPagesRef.current;
+    if (!pages) return;
+    pages.scrollTo({ left: pages.clientWidth * index, behavior: 'smooth' });
+    setActiveControl(index);
+  }, []);
 
   // --- 起動時: VOICEVOX の疎通確認と一覧取得 ---
   useEffect(() => {
@@ -109,10 +155,22 @@ export function EditorPage() {
 
   const speak = useCallback(async () => {
     const st = useStore.getState();
-    if (!st.text.trim()) return;
+    const lines = st.scriptLines.filter((line) => line.text.trim());
+    if (!lines.length) return;
 
     patch({ busy: true, error: null });
+    stopScriptRef.current = false;
     try {
+      for (const [index, line] of lines.entries()) {
+        if (stopScriptRef.current) break;
+        setSpeakingLine(index);
+        patch({ selectedCharacterId: line.characterId });
+        const res = await synthesize({ text: line.text, speaker: st.speakerId, speedScale: st.speedScale, pitchScale: st.pitchScale, intonationScale: st.intonationScale, volumeScale: st.volumeScale });
+        if (stopScriptRef.current) break;
+        bus.send({ type: 'speak', audio: res.audio, query: res.query, text: line.text });
+        await viewer?.character.speak(res.audio, res.query, line.text);
+      }
+      return;
       const res = await synthesize({
         text: st.text,
         speaker: st.speakerId,
@@ -128,19 +186,59 @@ export function EditorPage() {
     } catch (e) {
       patch({ error: e instanceof Error ? e.message : String(e) });
     } finally {
+      setSpeakingLine(null);
       patch({ busy: false });
     }
   }, [patch, viewer]);
 
   const stop = useCallback(() => {
+    stopScriptRef.current = true;
+    setSpeakingLine(null);
     viewer?.character.speech.stop();
     bus.send({ type: 'stop' });
   }, [viewer]);
+
+  const toggleRecording = useCallback(() => {
+    if (recorderRef.current?.state === 'recording') {
+      recorderRef.current.stop();
+      return;
+    }
+    if (!viewer || !window.MediaRecorder) {
+      patch({ error: 'このブラウザでは録画を開始できません。Chrome または Edge で試してね。' });
+      return;
+    }
+    try {
+      const stream = viewer.getCanvas().captureStream(30);
+      viewer.getRecordingAudioTracks().forEach((track) => stream.addTrack(track));
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
+      const recorder = new MediaRecorder(stream, { mimeType });
+      const chunks: BlobPart[] = [];
+      recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
+      recorder.onstop = () => {
+        stream.getVideoTracks().forEach((track) => track.stop());
+        const url = URL.createObjectURL(new Blob(chunks, { type: mimeType }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `egago-movie-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+        link.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        recorderRef.current = null;
+        setRecording(false);
+      };
+      recorderRef.current = recorder;
+      recorder.start(1000);
+      setRecording(true);
+    } catch (error) {
+      patch({ error: error instanceof Error ? error.message : '録画を開始できませんでした。' });
+    }
+  }, [patch, viewer]);
 
   const gesture = useCallback(
     (g: GestureName) => {
       viewer?.character.gesture(g);
       bus.send({ type: 'gesture', gesture: g });
+      setTwoDGesture(g);
+      window.setTimeout(() => setTwoDGesture(null), g === 'bow' ? 900 : 700);
     },
     [viewer],
   );
@@ -178,6 +276,7 @@ export function EditorPage() {
   return (
     <div className="editor">
       <div
+        ref={previewRef}
         className="preview"
         onDragOver={(e) => {
           e.preventDefault();
@@ -187,11 +286,48 @@ export function EditorPage() {
         onDrop={onDrop}
       >
         <VrmCanvas onReady={setViewer} />
+        {s.characterMode === 'image' && stageCharacters.map((character) => (
+          <TwoDCharacter
+            key={character.id}
+            character={character}
+            emotion={s.emotion}
+            gesture={character.id === s.selectedCharacterId ? twoDGesture : null}
+            onPointerDown={(event) => startCharacterDrag(event, character.id)}
+          />
+        ))}
         {loading && <div className="loading">モデルを読み込み中…</div>}
+        <button type="button" className={`record-button${recording ? ' is-recording' : ''}`} onClick={toggleRecording}>
+          {recording ? '■ 録画を止めて保存' : '● 録画スタート'}
+        </button>
         {dragging && <div className="dropzone">.vrm をドロップして読み込み</div>}
       </div>
 
       <aside className="sidebar">
+        <nav className="controller-header" aria-label="コントローラーのページ移動">
+          <button
+            type="button"
+            className="controller-arrow"
+            aria-label="前のコントローラー"
+            disabled={activeControl === 0}
+            onClick={() => goToControl(activeControl - 1)}
+          >
+            ‹
+          </button>
+          <div className="controller-current" aria-live="polite">
+            <span>いまのコントローラー</span>
+            <strong>{CONTROLLERS[activeControl]}</strong>
+            <small>{activeControl + 1} / {CONTROLLERS.length}</small>
+          </div>
+          <button
+            type="button"
+            className="controller-arrow"
+            aria-label="次のコントローラー"
+            disabled={activeControl === CONTROLLERS.length - 1}
+            onClick={() => goToControl(activeControl + 1)}
+          >
+            ›
+          </button>
+        </nav>
         <div className="status">
           <span className={`dot ${s.health === null ? 'wait' : engineOk ? 'ok' : 'bad'}`} />
           <span>
@@ -211,60 +347,30 @@ export function EditorPage() {
 
         {(s.error || modelError) && <div className="error">{s.error ?? modelError}</div>}
 
-        <Panel title="Speech">
-          <textarea
-            value={s.text}
-            placeholder="喋らせたい文章を入力"
-            onChange={(e) => set('text', e.target.value)}
-            onKeyDown={(e) => {
-              // Ctrl+Enter で発話。テキスト編集中に手が離れないように。
-              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault();
-                void speak();
-              }
-            }}
-          />
-          <div className="row" style={{ marginTop: 8 }}>
-            <button
-              className="primary"
-              style={{ flex: 1 }}
-              disabled={s.busy || !engineOk || !s.text.trim()}
-              onClick={() => void speak()}
-            >
-              {s.busy ? '合成中…' : '喋らせる'}
-            </button>
-            <button onClick={stop}>停止</button>
-          </div>
-          <p className="hint" style={{ marginTop: 6 }}>
-            Ctrl + Enter でも発話します。
-          </p>
-        </Panel>
+        <div
+          ref={controlPagesRef}
+          className="control-pages"
+          onScroll={(event) => {
+            const width = event.currentTarget.clientWidth;
+            if (width) setActiveControl(Math.round(event.currentTarget.scrollLeft / width));
+          }}
+        >
+        <CharacterScriptPanel
+          lines={s.scriptLines}
+          characters={stageCharacters}
+          busy={s.busy}
+          currentLine={speakingLine}
+          canSpeak={engineOk}
+          onChange={(scriptLines) => patch({ scriptLines })}
+          onSpeak={() => void speak()}
+          onStop={stop}
+        />
 
         <VoicePanel />
         <ExpressionPanel onGesture={gesture} />
         <ScenePanel />
+        </div>
 
-        <Panel title="Stage (OBS)">
-          <div className="status" style={{ marginBottom: 10 }}>
-            <span className={`dot ${s.stageConnected ? 'ok' : 'wait'}`} />
-            <span>{s.stageConnected ? 'Stage 接続中' : 'Stage 未接続'}</span>
-          </div>
-          <button
-            style={{ width: '100%', marginBottom: 8 }}
-            onClick={() => window.open('/stage', 'egago-stage', 'width=1280,height=720')}
-          >
-            Stage を別ウィンドウで開く
-          </button>
-          <Toggle
-            label="Stage 接続中は Editor をミュート"
-            checked={s.muteWhenStage}
-            onChange={(v) => set('muteWhenStage', v)}
-          />
-          <p className="hint" style={{ marginTop: 8 }}>
-            OBS のブラウザソースに <code>{location.origin}/stage?bg=alpha</code> を指定すると
-            背景が抜けた状態でキャラクターだけを取り込めます。
-          </p>
-        </Panel>
       </aside>
     </div>
   );

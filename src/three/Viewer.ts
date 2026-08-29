@@ -19,6 +19,7 @@ export class Viewer {
   private canvas: HTMLCanvasElement;
   private lastWidth = 0;
   private lastHeight = 0;
+  private backgroundTexture: THREE.Texture | null = null;
 
   /** 注視点の高さ。モデル読み込み時に頭の位置から決める。 */
   private focusHeight = 1.35;
@@ -105,8 +106,20 @@ export class Viewer {
     loop();
   }
 
-  setBackground(mode: BackgroundMode, color: string): void {
+  setBackground(mode: BackgroundMode, color: string, imageUrl = ''): void {
+    this.backgroundTexture?.dispose();
+    this.backgroundTexture = null;
+
     if (mode === 'alpha') {
+      this.scene.background = null;
+      this.renderer.setClearColor(0x000000, 0);
+    } else if (mode === 'image' && imageUrl) {
+      const texture = new THREE.TextureLoader().load(imageUrl);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      this.backgroundTexture = texture;
+      this.scene.background = texture;
+      this.renderer.setClearColor(0x000000, 1);
+    } else if (mode === 'image') {
       this.scene.background = null;
       this.renderer.setClearColor(0x000000, 0);
     } else {
@@ -120,6 +133,14 @@ export class Viewer {
     this.distance = distance;
     this.heightOffset = heightOffset;
     this.applyCamera();
+  }
+
+  getRecordingAudioTracks(): MediaStreamTrack[] {
+    return this.character.speech.getRecordingStream().getAudioTracks();
+  }
+
+  getCanvas(): HTMLCanvasElement {
+    return this.canvas;
   }
 
   private applyCamera(): void {
@@ -146,6 +167,7 @@ export class Viewer {
     cancelAnimationFrame(this.frame);
     this.controls.dispose();
     this.character.dispose();
+    this.backgroundTexture?.dispose();
     this.renderer.dispose();
     this.canvas.remove();
   }

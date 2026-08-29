@@ -68,7 +68,26 @@ export const GESTURE_LABELS: Record<GestureName, string> = {
   bow: 'お辞儀',
 };
 
-export type BackgroundMode = 'alpha' | 'green' | 'color';
+export type BackgroundMode = 'alpha' | 'green' | 'color' | 'image';
+
+export type CharacterMode = 'image' | 'vrm';
+
+export interface StageCharacter {
+  id: string;
+  name: string;
+  x: number;
+  height: number;
+  depth: number;
+  scale: number;
+  rotation: number;
+  facing: 1 | -1;
+}
+
+export interface ScriptLine {
+  id: string;
+  characterId: string;
+  text: string;
+}
 
 /** 口の形。VRM の口関連プリセット表情に 1:1 で対応する。 */
 export type Viseme = 'aa' | 'ih' | 'ou' | 'ee' | 'oh';

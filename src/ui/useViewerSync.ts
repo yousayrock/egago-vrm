@@ -8,8 +8,10 @@ import { useStore } from '../core/store';
  */
 export function useViewerSync(viewer: Viewer | null) {
   const modelUrl = useStore((s) => s.modelUrl);
+  const characterMode = useStore((s) => s.characterMode);
   const background = useStore((s) => s.background);
   const backgroundColor = useStore((s) => s.backgroundColor);
+  const backgroundImage = useStore((s) => s.backgroundImage);
   const cameraDistance = useStore((s) => s.cameraDistance);
   const cameraHeight = useStore((s) => s.cameraHeight);
   const breath = useStore((s) => s.breath);
@@ -27,6 +29,11 @@ export function useViewerSync(viewer: Viewer | null) {
 
   useEffect(() => {
     if (!viewer) return;
+    if (characterMode === 'image') {
+      setLoading(false);
+      setModelError(null);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setModelError(null);
@@ -43,11 +50,11 @@ export function useViewerSync(viewer: Viewer | null) {
     return () => {
       cancelled = true;
     };
-  }, [viewer, modelUrl]);
+  }, [viewer, modelUrl, characterMode]);
 
   useEffect(() => {
-    viewer?.setBackground(background, backgroundColor);
-  }, [viewer, background, backgroundColor]);
+    viewer?.setBackground(background, backgroundColor, backgroundImage);
+  }, [viewer, background, backgroundColor, backgroundImage]);
 
   useEffect(() => {
     viewer?.setCamera(cameraDistance, cameraHeight);
