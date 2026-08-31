@@ -25,7 +25,7 @@ export function EditorPage() {
   const { patch, set } = s;
   const stageCharacters = Array.isArray(s.characters) && s.characters.length
     ? s.characters
-    : [{ id: 'eriru-1', name: 'エリルたそ 1', x: 0, height: 0, depth: 0, scale: 1, rotation: 0, facing: 1 as const }];
+    : [{ id: 'eriru-1', name: 'エリルたそ 1', kind: 'eriru' as const, x: 0, height: 0, depth: 0, scale: 1, rotation: 0, facing: 1 as const }];
 
   const stageTimer = useRef<number | undefined>(undefined);
   const controlPagesRef = useRef<HTMLDivElement>(null);

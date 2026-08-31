@@ -2,7 +2,9 @@ import { useRef } from 'react';
 import { fetchModels, uploadModel } from '../core/api';
 import { useStore } from '../core/store';
 import { Field, Panel, Slider } from './parts';
-import type { StageCharacter } from '../core/types';
+import { CHARACTER_KIND_LABELS, type CharacterKind, type StageCharacter } from '../core/types';
+
+const CHARACTER_KINDS: CharacterKind[] = ['eriru', 'mia'];
 
 const CHARACTER_MODES = [
   { value: 'image', label: '2Dキャラ' },
@@ -19,7 +21,7 @@ export function ScenePanel() {
   const models = useStore((s) => s.models);
   const modelUrl = useStore((s) => s.modelUrl);
   const characterMode = useStore((s) => s.characterMode);
-  const characters = useStore((s) => Array.isArray(s.characters) && s.characters.length ? s.characters : [{ id: 'eriru-1', name: 'エリルたそ 1', x: 0, height: 0, depth: 0, scale: 1, rotation: 0, facing: 1 as const }]);
+  const characters = useStore((s) => Array.isArray(s.characters) && s.characters.length ? s.characters : [{ id: 'eriru-1', name: 'エリルたそ 1', kind: 'eriru' as const, x: 0, height: 0, depth: 0, scale: 1, rotation: 0, facing: 1 as const }]);
   const selectedCharacterId = useStore((s) => s.selectedCharacterId);
   const background = useStore((s) => s.background);
   const backgroundColor = useStore((s) => s.backgroundColor);
@@ -59,12 +61,13 @@ export function ScenePanel() {
     patch({ characters: characters.map((character) => character.id === selectedCharacter.id ? { ...character, ...values } : character) });
   }
 
-  function addCharacter() {
+  function addCharacter(kind: CharacterKind) {
     if (characters.length >= 4) return;
+    const sameKindCount = characters.filter((character) => character.kind === kind).length + 1;
     const number = characters.length + 1;
-    const id = `eriru-${Date.now()}`;
+    const id = `${kind}-${Date.now()}`;
     patch({
-      characters: [...characters, { id, name: `エリルたそ ${number}`, x: number % 2 ? -0.55 : 0.55, height: 0, depth: 0, scale: 0.78, rotation: 0, facing: 1 }],
+      characters: [...characters, { id, name: `${CHARACTER_KIND_LABELS[kind]} ${sameKindCount}`, kind, x: number % 2 ? -0.55 : 0.55, height: 0, depth: 0, scale: 0.78, rotation: 0, facing: 1 }],
       selectedCharacterId: id,
     });
   }
@@ -90,7 +93,7 @@ export function ScenePanel() {
           ))}
         </div>
         {characterMode === 'image' && (
-          <p className="hint two-d-note">エリルたそ（2Dキャラ）を表示中です。</p>
+          <p className="hint two-d-note">2Dキャラを表示中です。</p>
         )}
         {characterMode === 'image' && (
           <>
@@ -102,7 +105,11 @@ export function ScenePanel() {
               ))}
             </div>
             <div className="row character-actions">
-              <button type="button" style={{ flex: 1 }} disabled={characters.length >= 4} onClick={addCharacter}>+ キャラをふやす</button>
+              {CHARACTER_KINDS.map((kind) => (
+                <button type="button" key={kind} style={{ flex: 1 }} disabled={characters.length >= 4} onClick={() => addCharacter(kind)}>
+                  + {CHARACTER_KIND_LABELS[kind]}
+                </button>
+              ))}
               <button type="button" disabled={characters.length === 1} onClick={removeSelectedCharacter}>この子を消す</button>
             </div>
             {selectedCharacter && (

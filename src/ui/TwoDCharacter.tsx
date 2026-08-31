@@ -1,13 +1,40 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import type { EmotionName, GestureName, StageCharacter } from '../core/types';
+import type { CharacterKind, EmotionName, GestureName, StageCharacter } from '../core/types';
 
-const EXPRESSION_IMAGES: Record<EmotionName, string> = {
-  neutral: '/characters/eriru-neutral.png',
-  happy: '/characters/eriru-happy.png',
-  angry: '/characters/eriru-angry.png',
-  sad: '/characters/eriru-sad.png',
-  relaxed: '/characters/eriru-relaxed.png',
-  surprised: '/characters/eriru-surprised.png',
+interface SpriteSet {
+  expressions: Record<EmotionName, string>;
+  blink: string;
+  banzai: string;
+  alt: string;
+}
+
+const SPRITE_SETS: Record<CharacterKind, SpriteSet> = {
+  eriru: {
+    expressions: {
+      neutral: '/characters/eriru-neutral.png',
+      happy: '/characters/eriru-happy.png',
+      angry: '/characters/eriru-angry.png',
+      sad: '/characters/eriru-sad.png',
+      relaxed: '/characters/eriru-relaxed.png',
+      surprised: '/characters/eriru-surprised.png',
+    },
+    blink: '/characters/eriru-blink.png',
+    banzai: '/characters/eriru-banzai.png',
+    alt: 'エリルたそ',
+  },
+  mia: {
+    expressions: {
+      neutral: '/characters/mia-neutral.png',
+      happy: '/characters/mia-happy.png',
+      angry: '/characters/mia-angry.png',
+      sad: '/characters/mia-sad.png',
+      relaxed: '/characters/mia-relaxed.png',
+      surprised: '/characters/mia-surprised.png',
+    },
+    blink: '/characters/mia-blink.png',
+    banzai: '/characters/mia-banzai.png',
+    alt: 'ミア・リノス',
+  },
 };
 
 export function TwoDCharacter({
@@ -22,6 +49,7 @@ export function TwoDCharacter({
   onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
 }) {
   const [blinking, setBlinking] = useState(false);
+  const sprites = SPRITE_SETS[character.kind] ?? SPRITE_SETS.eriru;
 
   useEffect(() => {
     let blinkTimer: number | undefined;
@@ -57,8 +85,8 @@ export function TwoDCharacter({
       <img
         className="two-d-character"
         style={{ '--character-facing': character.facing, '--character-rotation': `${character.rotation}deg` } as CSSProperties}
-        src={gesture === 'surprise' ? '/characters/eriru-banzai.png' : blinking ? '/characters/eriru-blink.png' : EXPRESSION_IMAGES[emotion]}
-        alt="エリルたそ"
+        src={gesture === 'surprise' ? sprites.banzai : blinking ? sprites.blink : sprites.expressions[emotion]}
+        alt={sprites.alt}
       />
       <span className="character-spark spark-one" aria-hidden="true">✦</span>
       <span className="character-spark spark-two" aria-hidden="true">✧</span>

@@ -72,9 +72,18 @@ export type BackgroundMode = 'alpha' | 'green' | 'color' | 'image';
 
 export type CharacterMode = 'image' | 'vrm';
 
+/** 2Dキャラのスプライトセット。追加したら TwoDCharacter.tsx にも表情差分を登録すること。 */
+export type CharacterKind = 'eriru' | 'mia';
+
+export const CHARACTER_KIND_LABELS: Record<CharacterKind, string> = {
+  eriru: 'エリルたそ',
+  mia: 'ミア・リノス',
+};
+
 export interface StageCharacter {
   id: string;
   name: string;
+  kind: CharacterKind;
   x: number;
   height: number;
   depth: number;
