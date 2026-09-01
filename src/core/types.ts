@@ -75,6 +75,8 @@ export type CharacterMode = 'image' | 'vrm';
 export interface StageCharacter {
   id: string;
   name: string;
+  /** どの絵柄(CharacterAsset)を使うか。characterAssets.ts の CharacterAsset.id を指す。 */
+  spriteId: string;
   x: number;
   height: number;
   depth: number;

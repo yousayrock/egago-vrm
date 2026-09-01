@@ -1,14 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react';
+import { getCharacterAsset } from '../core/characterAssets';
 import type { EmotionName, GestureName, StageCharacter } from '../core/types';
-
-const EXPRESSION_IMAGES: Record<EmotionName, string> = {
-  neutral: '/characters/eriru-neutral.png',
-  happy: '/characters/eriru-happy.png',
-  angry: '/characters/eriru-angry.png',
-  sad: '/characters/eriru-sad.png',
-  relaxed: '/characters/eriru-relaxed.png',
-  surprised: '/characters/eriru-surprised.png',
-};
 
 export function TwoDCharacter({
   emotion,
@@ -22,6 +14,7 @@ export function TwoDCharacter({
   onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
 }) {
   const [blinking, setBlinking] = useState(false);
+  const asset = getCharacterAsset(character.spriteId);
 
   useEffect(() => {
     let blinkTimer: number | undefined;
@@ -57,8 +50,8 @@ export function TwoDCharacter({
       <img
         className="two-d-character"
         style={{ '--character-facing': character.facing, '--character-rotation': `${character.rotation}deg` } as CSSProperties}
-        src={gesture === 'surprise' ? '/characters/eriru-banzai.png' : blinking ? '/characters/eriru-blink.png' : EXPRESSION_IMAGES[emotion]}
-        alt="エリルたそ"
+        src={gesture === 'surprise' ? asset.images.banzai : blinking ? asset.images.blink : asset.images[emotion]}
+        alt={asset.label}
       />
       <span className="character-spark spark-one" aria-hidden="true">✦</span>
       <span className="character-spark spark-two" aria-hidden="true">✧</span>

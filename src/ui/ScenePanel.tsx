@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { fetchModels, uploadModel } from '../core/api';
+import { CHARACTER_ASSETS, getCharacterAsset } from '../core/characterAssets';
 import { useStore } from '../core/store';
 import { Field, Panel, Slider } from './parts';
 import type { StageCharacter } from '../core/types';
@@ -19,7 +20,7 @@ export function ScenePanel() {
   const models = useStore((s) => s.models);
   const modelUrl = useStore((s) => s.modelUrl);
   const characterMode = useStore((s) => s.characterMode);
-  const characters = useStore((s) => Array.isArray(s.characters) && s.characters.length ? s.characters : [{ id: 'eriru-1', name: 'エリルたそ 1', x: 0, height: 0, depth: 0, scale: 1, rotation: 0, facing: 1 as const }]);
+  const characters = useStore((s) => Array.isArray(s.characters) && s.characters.length ? s.characters : [{ id: 'eriru-1', name: 'エリルたそ 1', spriteId: CHARACTER_ASSETS[0].id, x: 0, height: 0, depth: 0, scale: 1, rotation: 0, facing: 1 as const }]);
   const selectedCharacterId = useStore((s) => s.selectedCharacterId);
   const background = useStore((s) => s.background);
   const backgroundColor = useStore((s) => s.backgroundColor);
@@ -62,9 +63,11 @@ export function ScenePanel() {
   function addCharacter() {
     if (characters.length >= 4) return;
     const number = characters.length + 1;
-    const id = `eriru-${Date.now()}`;
+    const id = `character-${Date.now()}`;
+    const spriteId = selectedCharacter?.spriteId ?? CHARACTER_ASSETS[0].id;
+    const label = getCharacterAsset(spriteId).label;
     patch({
-      characters: [...characters, { id, name: `エリルたそ ${number}`, x: number % 2 ? -0.55 : 0.55, height: 0, depth: 0, scale: 0.78, rotation: 0, facing: 1 }],
+      characters: [...characters, { id, name: `${label} ${number}`, spriteId, x: number % 2 ? -0.55 : 0.55, height: 0, depth: 0, scale: 0.78, rotation: 0, facing: 1 }],
       selectedCharacterId: id,
     });
   }
@@ -90,7 +93,7 @@ export function ScenePanel() {
           ))}
         </div>
         {characterMode === 'image' && (
-          <p className="hint two-d-note">エリルたそ（2Dキャラ）を表示中です。</p>
+          <p className="hint two-d-note">2Dキャラを表示中です。</p>
         )}
         {characterMode === 'image' && (
           <>
@@ -105,6 +108,20 @@ export function ScenePanel() {
               <button type="button" style={{ flex: 1 }} disabled={characters.length >= 4} onClick={addCharacter}>+ キャラをふやす</button>
               <button type="button" disabled={characters.length === 1} onClick={removeSelectedCharacter}>この子を消す</button>
             </div>
+            {selectedCharacter && (
+              <div className="grid c2 character-facing" aria-label="見た目">
+                {CHARACTER_ASSETS.map((asset) => (
+                  <button
+                    type="button"
+                    key={asset.id}
+                    className={selectedCharacter.spriteId === asset.id ? 'active' : ''}
+                    onClick={() => updateSelectedCharacter({ spriteId: asset.id })}
+                  >
+                    {asset.label}
+                  </button>
+                ))}
+              </div>
+            )}
             {selectedCharacter && (
               <div className="character-position">
                 <Slider label="左右" value={selectedCharacter.x} min={-1} max={1} step={0.05} onChange={(x) => updateSelectedCharacter({ x })} />

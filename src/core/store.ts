@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { Health } from './api';
+import { DEFAULT_CHARACTER_ASSET_ID } from './characterAssets';
 import type { BackgroundMode, CharacterMode, EmotionName, ScriptLine, Speaker, StageCharacter, VrmModel } from './types';
 
 /**
@@ -88,7 +89,7 @@ interface State {
 
 export const DEFAULT_MODEL_URL = '/models/default.vrm';
 const DEFAULT_STAGE_CHARACTERS: StageCharacter[] = [
-  { id: 'eriru-1', name: 'エリルたそ 1', x: 0, height: 0, depth: 0, scale: 1, rotation: 0, facing: 1 },
+  { id: 'eriru-1', name: 'エリルたそ 1', spriteId: DEFAULT_CHARACTER_ASSET_ID, x: 0, height: 0, depth: 0, scale: 1, rotation: 0, facing: 1 },
 ];
 
 /**
@@ -168,7 +169,7 @@ export const useStore = create<State>()(
     }),
     {
       name: 'egago-vrm',
-      version: 5,
+      version: 6,
       storage: createJSONStorage(() => (isStage ? noopStorage : localStorage)),
       migrate: (persisted) => {
         const state = persisted as Partial<State>;
@@ -184,7 +185,7 @@ export const useStore = create<State>()(
             ? { background: 'alpha' as BackgroundMode }
             : {}),
           characters: Array.isArray(state.characters) && state.characters.length
-            ? state.characters.map((character) => ({ ...character, depth: character.depth ?? 0, rotation: character.rotation ?? 0, facing: character.facing ?? 1 }))
+            ? state.characters.map((character) => ({ ...character, depth: character.depth ?? 0, rotation: character.rotation ?? 0, facing: character.facing ?? 1, spriteId: character.spriteId ?? DEFAULT_CHARACTER_ASSET_ID }))
             : DEFAULT_STAGE_CHARACTERS,
           selectedCharacterId: state.selectedCharacterId ?? DEFAULT_STAGE_CHARACTERS[0].id,
           scriptLines: Array.isArray(state.scriptLines) && state.scriptLines.length
