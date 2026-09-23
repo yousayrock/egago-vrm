@@ -18,15 +18,25 @@ export class LipSyncEngine {
   private cursor = 0;
   private current: Record<Viseme, number> = { aa: 0, ih: 0, ou: 0, ee: 0, oh: 0 };
   private active = false;
+  private amplitudeMode = false;
 
   start(timeline: VisemeSegment[]): void {
     this.timeline = timeline;
     this.cursor = 0;
     this.active = true;
+    this.amplitudeMode = false;
+  }
+
+  startAmplitude(): void {
+    this.timeline = [];
+    this.cursor = 0;
+    this.active = true;
+    this.amplitudeMode = true;
   }
 
   stop(): void {
     this.active = false;
+    this.amplitudeMode = false;
     this.timeline = [];
     this.cursor = 0;
   }
@@ -34,12 +44,15 @@ export class LipSyncEngine {
   /**
    * @param time 再生開始からの経過秒。AudioContext.currentTime を基準に算出したもの。
    */
-  update(dt: number, time: number, mixer: ExpressionMixer): void {
+  update(dt: number, time: number, mixer: ExpressionMixer, amplitude = 0): void {
     const target: Record<Viseme, number> = { aa: 0, ih: 0, ou: 0, ee: 0, oh: 0 };
 
     if (this.active) {
-      const seg = this.segmentAt(time);
-      if (seg?.viseme) target[seg.viseme] = seg.weight;
+      if (this.amplitudeMode) target.aa = amplitude;
+      else {
+        const seg = this.segmentAt(time);
+        if (seg?.viseme) target[seg.viseme] = seg.weight;
+      }
     }
 
     // 区間の切り替わりで口がカクつかないよう指数的に追従させる。

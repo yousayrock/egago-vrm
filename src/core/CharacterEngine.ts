@@ -62,7 +62,15 @@ export class CharacterEngine {
     this.root.add(this.lookAtTarget);
 
     this.speech.onStart = (query) => {
-      // 口パク・抑揚・仕草をすべて同じタイムラインから作る
+      if (!query) {
+        this.lipsync.startAmplitude();
+        this.motion.stopProsody();
+        this.cues = [];
+        this.emotionCues = [];
+        if (this.autoNod) this.motion.trigger('nod', 0.7);
+        return;
+      }
+      // VOICEVOX の口パク・抑揚・仕草は同じタイムラインから作る
       const timeline = buildSpeechTimeline(query);
       this.lipsync.start(timeline.visemes);
       this.motion.startProsody(timeline.prosody);
@@ -133,7 +141,7 @@ export class CharacterEngine {
     this.gazeBase.copy(p);
   }
 
-  async speak(audio: string, query: AudioQuery, text = ''): Promise<void> {
+  async speak(audio: string, query?: AudioQuery, text = ''): Promise<void> {
     this.pendingText = text;
     await this.speech.play(audio, query);
   }
@@ -184,7 +192,7 @@ export class CharacterEngine {
     // 3. 感情レイヤ
     this.emotion.update(dt, this.mixer);
     // 4. 口パクレイヤ。基準時刻は AudioContext から取る。
-    this.lipsync.update(dt, this.speech.time, this.mixer);
+    this.lipsync.update(dt, this.speech.time, this.mixer, this.speech.amplitude);
     // 5. 3 つのレイヤを合算して VRM に 1 度だけ書く
     this.mixer.apply(vrm);
 
@@ -200,7 +208,9 @@ export class CharacterEngine {
   }
 
   dispose(): void {
-    this.speech.stop();
+    ++this.loadToken;
+    this.onModelChanged = null;
+    this.speech.dispose();
     if (this.vrm) {
       this.root.remove(this.vrm.scene);
       disposeVRM(this.vrm);

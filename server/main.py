@@ -13,19 +13,29 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import pathlib
 import re
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 import voicevox
+from moss_provider import MossProvider
+from speech_jobs import SpeechJobService
+from voice_registry import ProfileError, VoiceRegistry
+from usb_package import PackageError, export_package, import_package
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MODELS_DIR = ROOT / "public" / "models"
+VOICES = VoiceRegistry(ROOT / "server" / "data" / "voices")
+MOSS = MossProvider()
+JOBS = SpeechJobService(ROOT / "server" / "data" / "speech", VOICES, MOSS)
 
 app = FastAPI(title="EGAGO VRM API", version="0.1.0")
 
@@ -100,6 +110,114 @@ async def synthesize(req: SynthesizeRequest) -> SynthesizeResponse:
 
 
 # --------------------------------------------------------------------------
+# Local MOSS profiles and generation. These routes do not depend on VOICEVOX.
+# --------------------------------------------------------------------------
+
+
+class ImportVoiceRequest(BaseModel):
+    profile: dict[str, Any]
+
+
+class SpeechJobRequest(BaseModel):
+    text: str
+    voiceId: str
+
+
+@app.get("/api/speech/status")
+async def speech_status() -> dict[str, Any]:
+    return MOSS.status()
+
+
+@app.get("/api/voices")
+async def list_voices() -> list[dict]:
+    return VOICES.list()
+
+
+@app.post("/api/voices/import")
+async def import_voice(req: ImportVoiceRequest) -> dict:
+    try:
+        return VOICES.save(req.profile)
+    except ProfileError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/voices/register")
+async def register_voice(file: UploadFile = File(...), name: str = Form(...)) -> dict:
+    if not (file.filename or "").lower().endswith(".wav"):
+        raise HTTPException(status_code=400, detail="WAVファイルを選んでください")
+    content = await file.read(10 * 1024 * 1024 + 1)
+    try:
+        profile = await asyncio.to_thread(MOSS.register, content, name)
+        return VOICES.save(profile)
+    except (ValueError, ProfileError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/voices/{voice_id}/export")
+async def export_voice(voice_id: str) -> dict:
+    try:
+        return VOICES.get(voice_id)
+    except ProfileError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/speech/jobs")
+async def submit_speech_job(req: SpeechJobRequest) -> dict:
+    try:
+        return JOBS.submit(req.text, req.voiceId)
+    except (ValueError, ProfileError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/speech/jobs/{job_id}")
+async def speech_job(job_id: str) -> dict:
+    job = JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="生成ジョブが見つかりません")
+    return job
+
+
+@app.post("/api/speech/jobs/{job_id}/cancel")
+async def cancel_speech_job(job_id: str) -> dict:
+    job = JOBS.cancel(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="生成ジョブが見つかりません")
+    return job
+
+
+@app.get("/api/speech/jobs/{job_id}/audio")
+async def speech_audio(job_id: str) -> FileResponse:
+    path = JOBS.audio_path(job_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="音声がまだ準備できていません")
+    return FileResponse(path, media_type="audio/wav", filename="speech.wav")
+
+
+class UsbExportRequest(BaseModel):
+    project: dict[str, Any]
+
+
+@app.post("/api/usb/export")
+async def usb_export(req: UsbExportRequest) -> Response:
+    try:
+        content = await asyncio.to_thread(export_package, req.project, VOICES, JOBS.directory)
+    except (PackageError, ProfileError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(content, media_type="application/zip", headers={
+        "Content-Disposition": 'attachment; filename="egago-project.zip"'})
+
+
+@app.post("/api/usb/import")
+async def usb_import(file: UploadFile = File(...)) -> dict:
+    content = await file.read(256 * 1024 * 1024 + 1)
+    try:
+        project = await asyncio.to_thread(import_package, content, VOICES, JOBS.directory)
+    except (PackageError, ProfileError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"project": project, "voices": VOICES.list()}
+
+
+# --------------------------------------------------------------------------
 # VRM モデル
 # --------------------------------------------------------------------------
 
@@ -169,3 +287,17 @@ async def bus(ws: WebSocket) -> None:
         pass
     finally:
         _clients.discard(ws)
+
+
+# A built Vite UI can be served by the same local process on Linux tablets.
+DIST_DIR = ROOT / "dist"
+
+
+@app.get("/{path:path}")
+async def built_ui(path: str) -> FileResponse:
+    if not DIST_DIR.is_dir() or path.startswith("api/"):
+        raise HTTPException(status_code=404)
+    target = (DIST_DIR / path).resolve()
+    if not target.is_relative_to(DIST_DIR.resolve()) or not target.is_file():
+        target = DIST_DIR / "index.html"
+    return FileResponse(target)

@@ -7,6 +7,7 @@ uvicorn の CLI が PATH に無い環境でも動くよう、Python から直接
 from __future__ import annotations
 
 import pathlib
+import os
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -29,4 +30,6 @@ import uvicorn
 if __name__ == "__main__":
     # main.py が `import voicevox` できるように server/ を import path に載せる
     sys.path.insert(0, str(HERE))
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True, reload_dirs=[str(HERE)])
+    production = os.environ.get("EGAGO_PRODUCTION") == "1"
+    uvicorn.run("main:app", host="127.0.0.1", port=8000,
+                reload=not production, reload_dirs=None if production else [str(HERE)])

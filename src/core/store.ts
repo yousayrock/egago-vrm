@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { Health } from './api';
-import type { BackgroundMode, CharacterMode, EmotionName, ScriptLine, Speaker, StageCharacter, VrmModel } from './types';
+import type { BackgroundMode, CharacterMode, EmotionName, ScriptLine, Speaker, SpeechProviderMode, StageCharacter, VoiceProfile, VrmModel } from './types';
 
 /**
  * 設定は localStorage に保存し、次回起動時に復元する (docs T017 の軽量版)。
@@ -37,6 +37,7 @@ interface State {
   speakerId: number;
   text: string;
   scriptLines: ScriptLine[];
+  speechProvider: SpeechProviderMode;
   speedScale: number;
   pitchScale: number;
   intonationScale: number;
@@ -71,6 +72,7 @@ interface State {
 
   // --- 実行時のみ ---
   speakers: Speaker[];
+  voiceProfiles: VoiceProfile[];
   models: VrmModel[];
   health: Health | null;
   busy: boolean;
@@ -112,6 +114,7 @@ export const useStore = create<State>()(
       speakerId: 3, // ずんだもん(ノーマル)。存在しなければ話者取得後に先頭へ寄せる。
       text: 'こんにちは。EGAGO VRM です。すべての絵には、愛があります。',
       scriptLines: [{ id: 'line-1', characterId: 'eriru-1', text: 'こんにちは。EGAGO VRM です。すべての絵には、愛があります。' }],
+      speechProvider: 'voicevox',
       speedScale: 1.0,
       pitchScale: 0.0,
       intonationScale: 1.0,
@@ -140,6 +143,7 @@ export const useStore = create<State>()(
       muteWhenStage: true,
 
       speakers: [],
+      voiceProfiles: [],
       models: [],
       health: null,
       busy: false,
@@ -190,12 +194,14 @@ export const useStore = create<State>()(
           scriptLines: Array.isArray(state.scriptLines) && state.scriptLines.length
             ? state.scriptLines
             : [{ id: 'line-1', characterId: state.selectedCharacterId ?? 'eriru-1', text: state.text ?? '' }],
+          speechProvider: state.speechProvider === 'moss' ? 'moss' : 'voicevox',
         };
       },
       partialize: (s) => ({
         speakerId: s.speakerId,
         text: s.text,
         scriptLines: s.scriptLines,
+        speechProvider: s.speechProvider,
         speedScale: s.speedScale,
         pitchScale: s.pitchScale,
         intonationScale: s.intonationScale,

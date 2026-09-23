@@ -40,12 +40,14 @@ export function TwoDCharacter({
   character,
   onPointerDown,
   selected,
+  blink: blinkEnabled = true,
 }: {
   emotion: EmotionName;
   gesture: GestureName | null;
   character: StageCharacter;
-  onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onPointerDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
   selected: boolean;
+  blink?: boolean;
 }) {
   const [blinking, setBlinking] = useState(false);
   const assets = CHARACTER_ASSETS[character.characterKey ?? 'eriru'] ?? CHARACTER_ASSETS.eriru;
@@ -55,6 +57,8 @@ export function TwoDCharacter({
   const x = Math.max(-maxX, Math.min(maxX, character.x));
 
   useEffect(() => {
+    setBlinking(false);
+    if (!blinkEnabled) return;
     let blinkTimer: number | undefined;
     let closeTimer: number | undefined;
 
@@ -71,7 +75,7 @@ export function TwoDCharacter({
       window.clearTimeout(blinkTimer);
       window.clearTimeout(closeTimer);
     };
-  }, []);
+  }, [blinkEnabled]);
 
   return (
     <div

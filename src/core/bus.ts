@@ -1,4 +1,5 @@
-import type { AudioQuery, BackgroundMode, EmotionName, GestureName } from './types';
+import type { AudioQuery, EmotionName, GestureName } from './types';
+import type { StageState } from './stageState';
 
 /**
  * Editor と Stage の同期チャネル。
@@ -8,26 +9,11 @@ import type { AudioQuery, BackgroundMode, EmotionName, GestureName } from './typ
  * サーバ経由なら「Chrome の Editor」→「OBS の Stage」も確実に届く。
  */
 
-export interface StageState {
-  modelUrl: string;
-  background: BackgroundMode;
-  backgroundColor: string;
-  cameraDistance: number;
-  cameraHeight: number;
-  /**
-   * 自動化のオン/オフ。
-   * Stage は受け取った text から仕草と表情を自分で組み立てるので、
-   * これを送らないと Editor で切ったのに Stage だけ動き続けることになる。
-   */
-  autoGesture: boolean;
-  autoEmotion: boolean;
-}
-
 export type BusMessage =
   | { type: 'hello'; role: 'editor' | 'stage' }
   | { type: 'state'; state: StageState }
   // text は Stage 側で自動ジェスチャーを組み立てるのに要る (文末の ? や ! を見る)
-  | { type: 'speak'; audio: string; query: AudioQuery; text: string }
+  | { type: 'speak'; audio: string; query?: AudioQuery; text: string }
   | { type: 'stop' }
   | { type: 'emotion'; emotion: EmotionName }
   | { type: 'gesture'; gesture: GestureName };
@@ -97,7 +83,12 @@ export const bus = {
       socket.send(JSON.stringify(msg));
     } else {
       // 接続前に飛んできたものは繋がってから送る(取りこぼすと Stage が初期状態のままになる)
-      queue.push(msg);
+      // 切断中の音声・仕草は後から再生しない。状態と接続通知だけ最新を保持する。
+      if (msg.type === 'state' || msg.type === 'hello') {
+        const index = queue.findIndex((pending) => pending.type === msg.type);
+        if (index >= 0) queue[index] = msg;
+        else queue.push(msg);
+      }
       connect();
     }
   },

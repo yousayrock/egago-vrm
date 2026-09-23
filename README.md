@@ -2,7 +2,54 @@
 
 > すべての絵には、愛(AI)がある。
 
-EGAGO VRM は VRM キャラクターを自然に喋らせるアプリです。
+EGAGO VRM は子どもたちのキャラクターと台本を使って会話を作るアプリです。
+
+## 音声MVPとLinuxタブレット（A〜C）
+
+声の登録と端末内生成は、VOICEVOXとは別のMOSS経路です。音声モデル本体と上流の
+`ort_cpu_runtime.py` はリポジトリに含めません。MOSS経路を使う端末では公式ONNXモデルを
+事前にローカルへ配置し、`EGAGO_MOSS_RUNTIME` にランタイムファイル、
+`EGAGO_MOSS_MODELS` に2つのモデルフォルダを含む親フォルダを指定します。
+`server/requirements-moss.txt` は追加のPython依存です。初回準備後の合成は外部通信を使いません。
+
+```bash
+git pull
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -r server/requirements-moss.txt
+npm ci
+npm run build
+export EGAGO_MOSS_RUNTIME=/path/to/MOSS-TTS-Nano/ort_cpu_runtime.py
+export EGAGO_MOSS_MODELS=/path/to/local/models
+EGAGO_PRODUCTION=1 python3 server/run.py
+```
+
+Linuxタブレットでは `http://127.0.0.1:8000` を開きます。開発時は別々の端末で
+`python3 server/run.py` と `npm run dev:web` を動かし、`http://127.0.0.1:5173` を開きます。
+`git pull` は変更がGitHubへ反映された後に実行してください。
+
+声パネルで「この端末の声（MOSS）」を選び、1〜30秒のWAVを選ぶかマイクで録音して登録します。
+声JSONを書き出して別端末で取り込むこともできます。キャラごとに声を割り当て、台本の
+「音声を準備」→「台本を読む」を使います。MOSS音声の口パクは振幅方式です。
+VOICEVOXのモーラ時刻に依存する自動仕草・表情・抑揚はMOSSには適用されません。
+声は `server/data/voices/`、生成済みWAVは `server/data/speech/` に保存されます。
+モデルが未配置の場合は登録・生成がエラーになります。MOSSを使うだけならVOICEVOXの起動は不要です。
+
+## USBでの持ち運び
+
+画面右側の「USB」ページからZIPを書き出し、保存ダイアログでUSBのマウント先を選びます。
+取り込むときは同ページでZIPを選びます。OSの自動マウントやudev連携は使いません。
+ZIPには `manifest.json`（`egago-usb-v1`、バージョン1、各ファイルのサイズとSHA-256）、
+`project.json`、キャラが参照する `voices/*.json`、端末に保存された `speech/*.wav` が入ります。
+取り込み時はパス・容量・形式・ハッシュを確認し、一時領域から新規パッケージとして反映します。
+既存の声や音声ファイルを上書きしません。ZIP上限は256MBです。
+
+USBパッケージにはMOSSモデル本体、VRMモデルファイル、2D画像ファイルは含みません。
+移動先端末にも対応するモデルとアプリ素材を配置してください。ブラウザの保存設定も
+まだ完全なプロジェクト管理ではなく、USBからの取り込みで復元します。
+
+現段階の動画録画はThree.jsキャンバスのみで、2Dキャラを含む完成動画の保存は次段階です。
+Linuxキオスク化、実機性能・本人の声の品質確認も未完了です。
 
 技術:
 

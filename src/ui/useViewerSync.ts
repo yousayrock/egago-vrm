@@ -29,6 +29,7 @@ export function useViewerSync(viewer: Viewer | null) {
 
   useEffect(() => {
     if (!viewer) return;
+    viewer.character.root.visible = characterMode === 'vrm';
     if (characterMode === 'image') {
       setLoading(false);
       setModelError(null);

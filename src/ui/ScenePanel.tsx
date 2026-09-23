@@ -9,8 +9,10 @@ const CHARACTER_MODES = [
   { value: 'vrm', label: 'VRM' },
 ] as const;
 
-const BG_LABELS: Record<'alpha' | 'image', string> = {
+const BG_LABELS = {
   alpha: '透過',
+  green: 'グリーン',
+  color: '単色',
   image: '画像',
 };
 
@@ -50,8 +52,13 @@ export function ScenePanel() {
   }
 
   function addBackgroundImage(file: File) {
-    const url = URL.createObjectURL(file);
-    patch({ background: 'image', backgroundImage: url });
+    // blob URL は OBS の別ブラウザから読めないため、画像本体を同期する。
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') patch({ background: 'image', backgroundImage: reader.result });
+    };
+    reader.onerror = () => patch({ error: '背景画像を読み込めませんでした。' });
+    reader.readAsDataURL(file);
   }
 
   function updateSelectedCharacter(values: Partial<StageCharacter>) {
@@ -73,7 +80,11 @@ export function ScenePanel() {
   function removeSelectedCharacter() {
     if (!selectedCharacter || characters.length === 1) return;
     const remaining = characters.filter((character) => character.id !== selectedCharacter.id);
-    patch({ characters: remaining, selectedCharacterId: remaining[0].id });
+    patch({
+      characters: remaining, selectedCharacterId: remaining[0].id,
+      scriptLines: useStore.getState().scriptLines.map((line) =>
+        line.characterId === selectedCharacter.id ? { ...line, characterId: remaining[0].id } : line),
+    });
   }
 
   return (

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchHealth, fetchModels, fetchSpeakers, synthesize, uploadModel } from '../core/api';
-import { bus, type StageState } from '../core/bus';
+import { fetchHealth, fetchModels, fetchSpeakers, uploadModel } from '../core/api';
+import { bus } from '../core/bus';
+import { currentStageState, stageStateKeys } from '../core/stageState';
+import { useScriptPlayback } from '../ui/useScriptPlayback';
 import { useStore } from '../core/store';
 import type { GestureName } from '../core/types';
 import type { Viewer } from '../three/Viewer';
@@ -9,12 +11,13 @@ import { CharacterScriptPanel } from '../ui/CharacterScriptPanel';
 import { ScenePanel } from '../ui/ScenePanel';
 import { useViewerSync } from '../ui/useViewerSync';
 import { VoicePanel } from '../ui/VoicePanel';
+import { UsbPanel } from '../ui/UsbPanel';
 import { VrmCanvas } from '../ui/VrmCanvas';
 import { TwoDCharacter } from '../ui/TwoDCharacter';
 
 /** Stage 側が生きているとみなす猶予。heartbeat 2 回分ぶんの余裕を見る。 */
 const STAGE_TIMEOUT = 12_000;
-const CONTROLLERS = ['おしゃべり', '声（こえ）', '気分', '動き', '体の動き', 'おまかせ', 'キャラクター', '背景', 'カメラ'];
+const CONTROLLERS = ['おしゃべり', '声（こえ）', '気分', '動き', '体の動き', 'おまかせ', 'キャラクター', '背景', 'カメラ', 'USB'];
 
 export function EditorPage() {
   const [viewer, setViewer] = useState<Viewer | null>(null);
@@ -31,8 +34,7 @@ export function EditorPage() {
   const controlPagesRef = useRef<HTMLDivElement>(null);
   const [activeControl, setActiveControl] = useState(0);
   const [twoDGesture, setTwoDGesture] = useState<GestureName | null>(null);
-  const [speakingLine, setSpeakingLine] = useState<number | null>(null);
-  const stopScriptRef = useRef(false);
+  const { speak, prepare, stop, speakingLine, statusForLine } = useScriptPlayback(viewer);
   const [recording, setRecording] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -154,70 +156,25 @@ export function EditorPage() {
 
   // --- Stage へ設定を配信 ---
   useEffect(() => {
-    bus.send({ type: 'state', state: currentStageState() });
-  }, [
-    s.modelUrl,
-    s.background,
-    s.backgroundColor,
-    s.cameraDistance,
-    s.cameraHeight,
-    s.autoGesture,
-    s.autoEmotion,
-  ]);
+    const sendState = () => bus.send({ type: 'state', state: currentStageState() });
+    sendState();
+    return useStore.subscribe((next, previous) => {
+      if (stageStateKeys.some((key) => next[key] !== previous[key])) sendState();
+    });
+  }, []);
 
   // Stage が鳴らしているあいだは Editor を黙らせる(口パクの時計は動かしたまま)
   useEffect(() => {
     viewer?.character.speech.setMuted(s.stageConnected && s.muteWhenStage);
   }, [viewer, s.stageConnected, s.muteWhenStage]);
 
-  const speak = useCallback(async () => {
-    const st = useStore.getState();
-    const lines = st.scriptLines.filter((line) => line.text.trim());
-    if (!lines.length) return;
-
-    patch({ busy: true, error: null });
-    stopScriptRef.current = false;
-    try {
-      for (const [index, line] of lines.entries()) {
-        if (stopScriptRef.current) break;
-        setSpeakingLine(index);
-        patch({ selectedCharacterId: line.characterId });
-        const res = await synthesize({ text: line.text, speaker: st.speakerId, speedScale: st.speedScale, pitchScale: st.pitchScale, intonationScale: st.intonationScale, volumeScale: st.volumeScale });
-        if (stopScriptRef.current) break;
-        bus.send({ type: 'speak', audio: res.audio, query: res.query, text: line.text });
-        await viewer?.character.speak(res.audio, res.query, line.text);
-      }
-      return;
-      const res = await synthesize({
-        text: st.text,
-        speaker: st.speakerId,
-        speedScale: st.speedScale,
-        pitchScale: st.pitchScale,
-        intonationScale: st.intonationScale,
-        volumeScale: st.volumeScale,
-      });
-
-      // Stage には合成済みの音をそのまま渡す。二重に合成しないし、必ず同じ音になる。
-      bus.send({ type: 'speak', audio: res.audio, query: res.query, text: st.text });
-      await viewer?.character.speak(res.audio, res.query, st.text);
-    } catch (e) {
-      patch({ error: e instanceof Error ? e.message : String(e) });
-    } finally {
-      setSpeakingLine(null);
-      patch({ busy: false });
-    }
-  }, [patch, viewer]);
-
-  const stop = useCallback(() => {
-    stopScriptRef.current = true;
-    setSpeakingLine(null);
-    viewer?.character.speech.stop();
-    bus.send({ type: 'stop' });
-  }, [viewer]);
-
   const toggleRecording = useCallback(() => {
     if (recorderRef.current?.state === 'recording') {
       recorderRef.current.stop();
+      return;
+    }
+    if (useStore.getState().characterMode === 'image') {
+      patch({ error: '2Dキャラクターの録画は未対応です。OBS の Stage 画面を録画してください。' });
       return;
     }
     if (!viewer || !window.MediaRecorder) {
@@ -312,6 +269,7 @@ export function EditorPage() {
             gesture={character.id === s.selectedCharacterId ? twoDGesture : null}
             onPointerDown={(event) => startCharacterDrag(event, character.id)}
             selected={character.id === s.selectedCharacterId}
+            blink={s.blink}
           />
         ))}
         {loading && <div className="loading">モデルを読み込み中…</div>}
@@ -379,31 +337,21 @@ export function EditorPage() {
           characters={stageCharacters}
           busy={s.busy}
           currentLine={speakingLine}
-          canSpeak={engineOk}
+          canSpeak={s.speechProvider === 'moss' || engineOk}
           onChange={(scriptLines) => patch({ scriptLines })}
           onSpeak={() => void speak()}
+          onPrepare={() => void prepare()}
           onStop={stop}
+          statusForLine={statusForLine}
         />
 
         <VoicePanel />
         <ExpressionPanel onGesture={gesture} />
         <ScenePanel />
+        <UsbPanel />
         </div>
 
       </aside>
     </div>
   );
-}
-
-function currentStageState(): StageState {
-  const s = useStore.getState();
-  return {
-    modelUrl: s.modelUrl,
-    background: s.background,
-    backgroundColor: s.backgroundColor,
-    cameraDistance: s.cameraDistance,
-    cameraHeight: s.cameraHeight,
-    autoGesture: s.autoGesture,
-    autoEmotion: s.autoEmotion,
-  };
 }

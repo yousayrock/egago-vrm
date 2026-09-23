@@ -75,6 +75,7 @@ export type CharacterMode = 'image' | 'vrm';
 export interface StageCharacter {
   id: string;
   name: string;
+  voiceId?: string;
   characterKey?: string;
   x: number;
   height: number;
@@ -88,6 +89,31 @@ export interface ScriptLine {
   id: string;
   characterId: string;
   text: string;
+}
+
+export type SpeechProviderMode = 'voicevox' | 'moss';
+
+export interface VoiceProfile {
+  id: string;
+  name: string;
+  format: string;
+  model: string;
+  codec: string;
+  content_hash: string;
+}
+
+export interface SpeechResult {
+  audio: string;
+  /** VOICEVOX だけが正確なモーラ時刻を持つ。MOSS では省略する。 */
+  query?: AudioQuery;
+}
+
+export interface SpeechJob {
+  id: string;
+  status: 'queued' | 'loading' | 'generating' | 'ready' | 'failed' | 'cancelled';
+  error: string | null;
+  voiceId: string;
+  cacheKey: string;
 }
 
 /** 口の形。VRM の口関連プリセット表情に 1:1 で対応する。 */
