@@ -1,0 +1,15 @@
+node_modules/
+dist/
+*.tsbuildinfo
+__pycache__/
+*.py[cod]
+.venv/
+.DS_Store
+*.local
+tmp/
+
+# VRM モデルは配布対象に含めない (ライセンスは各モデルに従う)
+public/models/*.vrm
+
+# Claude Code のローカル設定
+.claude/settings.local.json
